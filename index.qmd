@@ -1,0 +1,698 @@
+---
+title:  A multi-agent system to draft project proposal
+subtitle: Technical Approach Paper
+date: today
+author: Edouard Legoupil, Chief Data Officer, IOM
+format: quarto_iom_article-html
+project:
+  type: website
+jupyter: python3
+kernel: project_drafter_kernel  # Must match the name above
+execute:
+  engine: jupyter
+  eval: true
+toc: true
+---
+
+A Multi-Agent System (MAS) is a computational framework where multiple autonomous agents interact to solve complex problems beyond the capability of individual agents. These systems are inspired by natural systems (e.g., ant colonies, human teams) and exhibit:
+
+- Autonomy: Agents operate independently with their own goals and decision-making.
+
+- Decentralization: No single point of control—coordination emerges through interaction.
+
+- Collaboration: Agents communicate, negotiate, or compete to achieve objectives.
+
+- Scalability: Tasks can be distributed dynamically across agents.
+
+Key Characteristics
+
+- Agents: Can be software entities, robots, or AI models with perception, reasoning, and action capabilities.
+
+- Environment: Shared space where agents operate (virtual, physical, or hybrid).
+
+- Interaction Protocols: Rules for communication (e.g., contracts, auctions, blackboard systems).
+
+Key Takeaways
+
+- Start with workflow decomposition - map the process steps
+
+- Design agents as specialized team members with clear RACI roles
+
+- Ensure tool complementarity - no redundant capabilities
+
+- Build in review mechanisms - some agents should validate others
+
+- Maintain scalable structure - add/remove agents without disrupting flow
+CrewAI Notebook: Getting Started Guide
+
+# Intro
+
+This notebook will help you understand the basics of CrewAI, a framework for building autonomous AI agents that work together to accomplish tasks.
+
+------------------------------------------------------------------------
+
+## Environment Set up
+
+The body of this document targets a technical audience. Below are all the codes so that the whole process can be reproduced and audited. This assume to use the following code within [Visual Studio Code](https://code.visualstudio.com/).
+
+First we need to use a virtual environment in Python development. This is essential for managing dependencies, avoiding conflicts, and ensuring reproducibility. It allows you to isolate project-specific libraries and versions, preventing interference with other projects or the global Python installation. This isolation helps maintain a clean development environment, simplifies project setup for collaborators, and enhances security by reducing the risk of introducing vulnerabilities. Overall, virtual environments provide a consistent and organized way to manage your Python projects effectively.
+
+Make sure to install the last [stable version of python language](https://www.python.org/downloads/) and create a dedicated python environment to have a fresh install where to manage correctly all the dependencies between packages. To specify a particular version of Python when creating a virtual environment, you can use the full path to the desired Python executable. Here is how you can do it:
+
+Open your terminal (Command Prompt, PowerShell, or any terminal emulator).
+
+Navigate to your project directory where you want to create the virtual environment.
+
+Run the following command to create a virtual environment,here called **`.venv`**:
+
+> python -m venv .venv
+
+Then, activate the virtual environment:
+
+> .\.venv\Scripts\activate
+
+Then, configure visual Studio Code to use the virtual environment: Open the Command Palette using the shortcut `Ctrl+Shift+P` and type `Jupyter: Select Interpreter` and select the interpreter that corresponds to your newly created virtual environment: `('venv': venv)`.
+
+Once this environment selected as a kernel to run the notebook, we can install the required python modules the rest of the process:
+
+```{python} 
+#| eval: false
+%pip install --upgrade --quiet  python_docx
+%pip install --upgrade --quiet  openai
+%pip install --upgrade --quiet  dotenv 
+%pip install --upgrade --quiet  langchain_openai
+%pip install --upgrade --quiet  langchain_ollama
+```
+
+Install and Explore [CrewAI’s documentation](https://docs.crewai.com/introduction)
+
+```{python}
+#| eval: false
+%pip install --upgrade --quiet  crewai 
+```
+
+then Restart the jupyter kernel for this notebook
+```{python}
+%reset -f
+```
+
+## Setting up LLM API 
+
+### Using Ollama with a local small 7B model
+
+If you can not access any LLM  API, you can install one offline running locally on your computer.
+
+In shell run: 
+
+> winget install Ollama 
+> ollama run deepseek-r1
+
+```{python}
+#| eval: false
+from langchain_ollama import OllamaLLM
+
+#  Initialize Ollama with explicit settings
+llm_deepseek = OllamaLLM(
+    model="ollama_chat/deepseek--r1",
+    base_url="http://localhost:11434",
+    keep_alive="10m",       # Keep the model loaded for 10 minutes
+    num_ctx=4096,           # Increase context length
+   # num_gpu=1,              # Use 1 GPU if you have one....
+    temperature=0.7,        # Slight randomness in responses
+    top_p=0.9,              # Probability sampling
+    system="You are an AI expert specialised in Humanitarian Project management.",
+    verbose=True,            # Enable debugging logs
+    timeout=300  # Important for larger responses
+)
+
+# Example usage
+response = llm_deepseek.predict("If you have to create a humanitarian project proposal, what are the key steps you would start and decision point you need before starting writing the document?")
+print(response)
+```
+
+Check anoter model directly from Hugging Face
+
+> ollama run hf.co/bartowski/OpenThinker-7B-GGUF:IQ4_XS
+
+```{python}
+#| eval: false
+from langchain_ollama import OllamaLLM
+
+#  Initialize Ollama with explicit settings
+llm_OpenThinker = OllamaLLM(
+    model="ollama_chat/hf.co/bartowski/OpenThinker-7B-GGUF:IQ4_XS",
+    base_url="http://localhost:11434",
+    keep_alive="10m",       # Keep the model loaded for 10 minutes
+    num_ctx=4096,           # Increase context length
+   # num_gpu=1,              # Use 1 GPU if you have one....
+    temperature=0.7,        # Slight randomness in responses
+    top_p=0.9,              # Probability sampling
+    system="You are an AI expert specialised in Humanitarian Project management.",
+    verbose=True,            # Enable debugging logs
+    timeout=300  # Important for larger responses
+)
+
+# Example usage
+response = llm_OpenThinker.predict("If you have to create a humanitarian project proposal, what are the key steps you would start and decision point you need before starting writing the document?")
+print(response)
+ 
+```
+
+### Using Azure Open AI
+
+https://blog.crewai.com/configuring-azure-openai-with-crewai-a-comprehensive-guide/
+
+```{python}
+import os
+from dotenv import load_dotenv
+# Load environment variables (Assuming you store API keys in a .env file)
+load_dotenv()
+# Set Azure-specific environment variables
+os.environ["OPENAI_API_TYPE"] = "azure"
+
+# Configuring AzureChatOpenAI
+from langchain_openai import AzureChatOpenAI
+llm_azure = AzureChatOpenAI(
+    azure_deployment=os.getenv("AZURE_DEPLOYMENT_NAME"),
+    azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
+    api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+    api_version=os.getenv("OPENAI_API_VERSION") ,
+    model=f"azure/{os.getenv('AZURE_DEPLOYMENT_NAME')}",
+    max_retries=3,
+    timeout=30,
+    temperature=0.67,  # Adjust based on requirements
+    max_tokens=10000  # Adjust based on requirements
+)
+
+# Example usage
+response = llm_azure.invoke("If you have to create a humanitarian project proposal, what are the key steps you would start and decision point you need before starting writing the document?")
+print(response.content) 
+```
+
+
+# First Iteration of our Multi-Agent System with 2 agents in a sequential way
+
+### Define Your Agents
+
+Agents are AI workers with roles, goals, and tools.
+
+
+```{python}
+from crewai import Crew, Agent, Task, Process
+
+proposal_writer = Agent(
+    role="Humanitarian Proposal Writer",
+    llm= llm_azure,
+    goal="Write compelling funding proposals for humanitarian projects",
+    backstory=(
+        "You are an expert in humanitarian aid and grant writing. "
+        "You have 10+ years of experience drafting proposals"
+        "and know how to structure them for maximum impact."
+    ),
+    verbose=True,
+    allow_delegation=False
+)
+
+proposal_reviewer = Agent(
+    role="Proposal Quality Assurance Specialist",
+    llm=llm_azure,
+    goal="Ensure proposals meet funding criteria, follows strict formatting and content requirements and are well-structured",
+    backstory=(
+        "You are a grant evaluator for major humanitarian organizations. "
+        "You have a deep knowledge of donor expectations and proposal evaluation criteria."
+        "You are meticulous about formatting, word limits, and logical flow."
+        "You know exactly what funders look for and how to improve proposals."
+    ),
+    verbose=True,
+    allow_delegation=False
+)
+```
+
+
+### Create Tasks
+
+Tasks define what each agent should do.
+```{python}
+write_proposal = Task(
+    description=(
+        "Write a detailed project proposal for a humanitarian funding request. "
+        "The project aims to provide develop the usage of AI to improve IOM efficiency when drafting project proposal. "
+        "Include: Problem Statement, Objectives, Methodology, Budget, and Expected Impact."
+    ),
+    expected_output=(
+        "A well-structured 2-page proposal document with clear sections: "
+        "1. Introduction & Problem Statement "
+        "2. Project Objectives "
+        "3. Methodology & Implementation Plan "
+        "4. Budget Breakdown "
+        "5. Expected Outcomes & Sustainability"
+    ),
+    agent=proposal_writer,
+)
+
+review_proposal = Task(
+    description=(
+        "Critically review the proposal draft and suggest improvements. "
+        "Ensure clarity, alignment with donor expectations, and no errors."
+    ),
+    expected_output=(
+        "A revised proposal with tracked changes and recommendations. "
+        "A short summary of key improvements made."
+    ),
+    agent=proposal_reviewer,
+)
+```
+
+### Assemble the Crew
+
+Combine agents and tasks into a team.
+```{python}
+crew = Crew(
+    agents=[proposal_writer, proposal_reviewer],
+    tasks=[write_proposal, review_proposal],
+    process=Process.sequential,  # First write, then review
+    verbose=True  
+)
+```
+
+### Run the Crew
+
+Execute the workflow.
+```{python}
+result = crew.kickoff()
+print("✅ Proposal 1 generated successfully!")
+print(result)
+```
+
+## Second Iteration: Add more agents with a manager
+
+```{python}
+from crewai import Agent, Task, Crew, Process
+
+# ================= AGENTS =================
+manager_agent = Agent(
+    role="Proposal Manager",
+    goal="Oversee proposal quality and coherence",
+    backstory=(
+        "You are an expert in humanitarian aid and grant writing. "
+        "You have 10+ years of experience drafting proposals"
+        "and know how to structure them for maximum impact."
+        "You coordinate the creation of a detailed project proposal for a humanitarian funding request. "
+        "The project aims to provide develop the usage of AI to improve IOM efficiency when drafting project proposal. " 
+    ),
+    llm=llm_azure,
+    verbose=True
+)
+
+context_analyst = Agent(
+    role="Context Specialist",
+    goal="Analyze project background and needs",
+    backstory="UN humanitarian needs assessment expert",
+    llm=llm_azure,
+    verbose=True
+)
+
+design_lead = Agent(
+    role="Program Designer",
+    goal="Develop project framework and logic",
+    backstory="IOM program architect specializing in logical frameworks",
+    llm=llm_azure,
+    verbose=True
+)
+
+m_e_specialist = Agent(
+    role="M&E Coordinator",
+    goal="Design monitoring and evaluation systems",
+    backstory="WHO monitoring specialist with results-based management expertise",
+    llm=llm_azure,
+    verbose=True
+)
+
+# ================= TASKS =================
+summary_task = Task(
+    description="Draft 350-word project summary per IOM standards",
+    expected_output="Concise summary with context, objectives, and theory of change",
+    agent=context_analyst
+)
+
+rationale_task = Task(
+    description="Develop 400-word problem analysis and justification",
+    expected_output="Structured rationale with evidence and alignment",
+    agent=context_analyst
+)
+
+framework_task = Task(
+    description="Create 600-word project description with theory of change",
+    expected_output="Detailed framework with activities-outputs-outcomes logic",
+    agent=design_lead
+)
+
+monitoring_task = Task(
+    description="Design 350-word monitoring plan with indicators",
+    expected_output="Practical M&E framework with data collection methods",
+    agent=m_e_specialist
+)
+
+# ================= CREW CONFIGURATION =================
+proposal_crew = Crew(
+    agents=[ context_analyst, design_lead, m_e_specialist],
+    tasks=[summary_task, rationale_task, framework_task, monitoring_task],    
+    process=Process.hierarchical,  # Correct attribute name (lowercase)
+    manager_llm=llm_azure,
+    manager_agent=manager_agent,
+    verbose=True
+)
+
+# Execution with error handling
+result = proposal_crew.kickoff()
+print("✅ Proposal 2 generated successfully!")
+print(result)
+    
+```
+
+## Third Iteration: Add more agents and Output a project document following the expected structure
+
+### Agents
+
+```{python}
+manager_agent = Agent(
+    role="Proposal Manager",
+    goal="Oversee the development of a proposal for project whose main objective is to develop the usage of AI to improve IOM efficiency when drafting project proposal. Coordinate all proposal sections",
+    backstory=(
+        "You are an expert in humanitarian aid and grant writing. "
+        "You have 10+ years of experience drafting proposals"
+        "and know how to structure them for maximum impact."
+        "You coordinate the creation of a detailed project proposal for a humanitarian funding request. "
+    ),
+    llm=llm_azure,
+    verbose=True
+)
+
+context_analyst = Agent(
+    role="Context Analyst",
+    goal="Analyze project background and justification",
+    backstory="Researcher specializing in needs assessments and problem framing",
+    llm=llm_azure,
+    verbose=True
+)
+
+proposal_architect = Agent(
+    role="Proposal Architect",
+    goal="Design comprehensive project frameworks",
+    backstory="IOM program designer with 10+ years creating logical frameworks",
+    llm=llm_azure,
+    verbose=True
+)
+
+gender_specialist = Agent(
+    role="Gender and Inclusion Specialist",
+    goal="Ensure gender/disability/age considerations are integrated",
+    backstory="Gender consultant on inclusive programming",
+    llm=llm_azure,
+    verbose=True
+)
+
+monitoring_expert = Agent(
+    role="M&E Specialist",
+    goal="Develop robust monitoring and evaluation systems",
+    backstory="M&E lead for IOM programs",
+    llm=llm_azure,
+    verbose=True
+)
+
+finance_analyst = Agent(
+    role="Budget Specialist",
+    goal="Create realistic budget projections",
+    backstory="Finance officer with grant compliance expertise",
+    llm=llm_azure,
+    verbose=True
+)
+```
+
+### Task
+
+```{python}
+summary_task = Task(
+    description=(
+        "Analyse the project main objective shared by the manager"
+        "Draft the Project Summary (strictly 350 words max) covering:\n"
+        "- Context and need\n"
+        "- Project objective\n"
+        "- How activities lead to outputs\n"
+        "- How outputs influence outcomes\n"
+        "- Link to IOM strategic goals"
+    ),
+    expected_output="Concise 350-word summary meeting all IOM requirements",
+    agent=context_analyst,
+    output_file="1_summary.txt"
+)
+
+rationale_task = Task(
+    description=(
+        "Analyse the project main objective shared by the manager"
+        "Develop the Project Rationale (400 words max) with:\n"
+        "a) Problem analysis:\n"
+        "   - Situation being addressed\n"
+        "   - Why it's problematic\n"
+        "   - Temporal/geographic specificity\n"
+        "   - Differential group impacts (gender/age/disability)\n"
+        "b) Justification:\n"
+        "   - Value to beneficiaries\n"
+        "   - Potential unintended consequences\n"
+        "c) Alignment:\n"
+        "   - Links to national/global frameworks"
+    ),
+    expected_output="400-word rationale with clear subsections",
+    agent=context_analyst,
+    output_file="2_rationale.txt"
+)
+
+description_task = Task(
+    description=(
+        "Analyse the project main objective shared by the manager"
+        "Create the Project Description (600 words max) including:\n"
+        "a) Theory of Change:\n"
+        "   - Activities→Outputs→Outcomes logic\n"
+        "   - Key assumptions\n"
+        "b) Stakeholder analysis:\n"
+        "   - IOM's comparative advantage\n"
+        "   - Partner roles (gender-balanced)\n"
+        "c) Cross-cutting themes:\n"
+        "   - Gender mainstreaming\n"
+        "   - Environmental sustainability\n"
+        "   - Protection principles"
+    ),
+    expected_output="Structured 600-word description with subsections",
+    agent=proposal_architect,
+    output_file="3_description.txt"
+)
+
+partnerships_task = Task(
+    description=(
+        "Analyse the project main objective shared by the manager"
+        "Outline Partnerships (350 words max) specifying:\n"
+        "- Each partner's key responsibilities\n"
+        "- Coordination mechanisms\n"
+        "- Management structure"
+    ),
+    expected_output="Clear partnership matrix and coordination plan",
+    agent=proposal_architect,
+    output_file="4_partnerships.txt"
+)
+
+monitoring_task = Task(
+    description=(
+        "Analyse the project main objective shared by the manager"
+        "Design Monitoring Framework (350 words max) covering:\n"
+        "- Roles/responsibilities\n"
+        "- Data collection tools/methods\n"
+        "- Frequency of collection\n"
+        "- Remote monitoring protocols"
+    ),
+    expected_output="Practical monitoring plan with indicators",
+    agent=monitoring_expert,
+    output_file="5_monitoring.txt"
+)
+
+evaluation_task = Task(
+    description=(
+        "Analyse the project main objective shared by the manager"
+        "Develop Evaluation Approach (350 words max) specifying:\n"
+        "- Timing/purpose\n"
+        "- Methodology\n"
+        "- Internal/external execution\n"
+        "- Key evaluation criteria"
+    ),
+    expected_output="Evaluation plan with clear methodology",
+    agent=monitoring_expert,
+    output_file="6_evaluation.txt"
+)
+
+matrix_task = Task(
+    description=(
+        "Analyse the project main objective shared by the manager"
+        "Create Results Matrix with:\n"
+        "- SMART Objectives\n"
+        "- Outcomes/Outputs hierarchy\n"
+        "- Indicators (disaggregated)\n"
+        "- Data sources\n"
+        "- Baselines/targets\n"
+        "- Key assumptions"
+    ),
+    expected_output="Complete matrix in table format",
+    agent=proposal_architect,
+    output_file="7_matrix.txt"
+)
+
+workplan_task = Task(
+    description=(
+        "Analyse the project main objective shared by the manager"
+        "Develop Workplan detailing:\n"
+        "- Activity timelines\n"
+        "- Responsible partners\n"
+        "- Phased implementation"
+    ),
+    expected_output="Gantt-style schedule with partner assignments",
+    agent=proposal_architect,
+    output_file="8_workplan.txt"
+)
+
+budget_task = Task(
+    description=(
+        "Analyse the project main objective shared by the manager"
+        "Prepare Budget including:\n"
+        "- Line items by category\n"
+        "- Cost projections\n"
+        "- Currency specifications\n"
+        "- Partner allocations"
+    ),
+    expected_output="Detailed budget table in USD",
+    agent=finance_analyst,
+    output_file="9_budget.txt"
+)
+
+risk_task = Task(
+    description=(
+        "Analyse the project main objective shared by the manager"
+        "Develop Risk Assessment with:\n"
+        "- Risk factors\n"
+        "- Consequence scores (1-6)\n"
+        "- Likelihood/timeline\n"
+        "- Mitigation strategies\n"
+        "- Treatment actions"
+    ),
+    expected_output="Risk matrix with mitigation plans",
+    agent=monitoring_expert,
+    output_file="10_risk.txt"
+)
+```
+
+
+```{python}
+proposal_crew = Crew(
+    agents=[      
+        context_analyst,
+        proposal_architect,
+        gender_specialist,
+        monitoring_expert,
+        finance_analyst
+    ],
+    tasks=[
+        summary_task,
+        rationale_task,
+        description_task,
+        partnerships_task,
+        monitoring_task,
+        evaluation_task,
+        matrix_task,
+        workplan_task,
+        budget_task,
+        risk_task
+    ],    
+    process=Process.hierarchical,  # Correct attribute name (lowercase)
+    manager_llm=llm_azure,
+    manager_agent=manager_agent,
+    verbose=True 
+)
+```
+
+
+## Run the Crew
+
+Execute the workflow.
+ 
+ ```{python}
+result = proposal_crew.kickoff()
+print("✅ Proposal 3 generated successfully!")
+ ```
+
+and now save all the results within a word document.
+
+ ```{python}
+from docx import Document
+from docx.shared import Pt
+import os
+
+def format_proposal(output_files):
+    """Combine all output files into a single Word document"""
+    doc = Document()
+    
+    # Set styles
+    style = doc.styles['Normal']
+    style.font.name = 'Calibri'
+    style.font.size = Pt(11)
+    
+    # Add sections in IOM standard order
+    sections = [
+        ("1. Project Summary", "1_summary.txt"),
+        ("2. Rationale", "2_rationale.txt"),
+        ("3. Project Description", "3_description.txt"),
+        ("4. Partnerships", "4_partnerships.txt"),
+        ("5. Monitoring", "5_monitoring.txt"),
+        ("6. Evaluation", "6_evaluation.txt"),
+        ("7. Results Matrix", "7_matrix.txt"),
+        ("8. Workplan", "8_workplan.txt"),
+        ("9. Budget", "9_budget.txt"),
+        ("10. Risk Assessment", "10_risk.txt")
+    ]
+    
+    for title, filename in sections:
+        try:
+            with open(filename, 'r') as f:
+                content = f.read()
+                doc.add_heading(title, level=1)
+                doc.add_paragraph(content)
+        except FileNotFoundError:
+            print(f"⚠️ {filename} not found - skipping section")
+    
+    output_path = "IOM_Proposal_Final.docx"
+    doc.save(output_path)
+    return output_path
+
+doc_path = format_proposal(result)
+print(f"✅ Proposal 3 saved to Word document: {os.path.abspath(doc_path)}")    
+```
+
+# Conclusion
+
+In this notebook, we have presented just the result of an initial exploration. More work is required and is in the making to get such system into production.
+
+This requires a lot of experimentation in the definition of the different agents & tasks. For instance: 
+
+- The knowledge from [IOM Project Handbook](https://publications.iom.int/system/files/pdf/iom_project_handbook_6feb2012.pdf) needs also to be more systematically extracted with [LlamaIndex Tool](https://docs.crewai.com/tools/llamaindextool), ideally through a Questions & Answers format to more strictly inform the specific task from each agents.
+
+- In addition, the system can benefit from the integration of tools like [Google Serper Search](https://docs.crewai.com/tools/serperdevtool) or custom Machine Learning APIs (for instance to predict donors funding appetite based on existing data).
+
+```{python}
+#| eval: false
+from crewai_tools import SerperDevTool
+
+search_tool = SerperDevTool()
+
+researcher = Agent(
+    role='Researcher',
+    tools=[search_tool],
+    # ... (rest of the agent definition)
+)
+```
+
