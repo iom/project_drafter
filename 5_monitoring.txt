@@ -1,1 +1,0 @@
-The M&E Specialist will design a monitoring framework for the project. The framework will include roles and responsibilities, data collection tools and methods, frequency of data collection, and remote monitoring protocols. The final deliverable will be a detailed monitoring plan with indicators.
