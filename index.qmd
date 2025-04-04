@@ -57,11 +57,11 @@ Navigate to your project directory where you want to create the virtual environm
 
 Run the following command to create a virtual environment,here called **`.venv`**:
 
-> python -m venv .venv
+- `python -m venv .venv`
 
 Then, activate the virtual environment:
 
-> .\.venv\Scripts\activate
+- `.\.venv\Scripts\activate`
 
 Then, configure visual Studio Code to use the virtual environment: Open the Command Palette using the shortcut `Ctrl+Shift+P` and type `Jupyter: Select Interpreter` and select the interpreter that corresponds to your newly created virtual environment: `('venv': venv)`.
 
@@ -69,10 +69,11 @@ Once this environment selected as a kernel to run the notebook, we can install t
 
 ```{python} 
 #| eval: false
-%pip install --upgrade --quiet  python_docx
-%pip install --upgrade --quiet  dotenv 
-%pip install --upgrade --quiet  langchain_openai
-%pip install --upgrade --quiet  langchain_ollama
+%pip install --upgrade --quiet  dotenv ## load env variable where I have API keys
+%pip install --upgrade --quiet  langchain_openai ## use langchain LLM server
+%pip install --upgrade --quiet  datatime
+%pip install --upgrade --quiet  python_docx ## create word files
+%pip install --upgrade --quiet  markdown ## work with markdown files
 ```
 
 Install `CrewAI` and Explore the [documentation](https://docs.crewai.com/introduction)
@@ -126,11 +127,14 @@ llm_azure = AzureChatOpenAI(
     model=f"azure/{os.getenv('AZURE_DEPLOYMENT_NAME')}",
     max_retries=3,
     timeout=30,
-    temperature=0.67,  # Adjust based on requirements
-    max_tokens=10000  # Adjust based on requirements
+  #  max_tokens=2000  # max possible..
+    temperature=0.3,  # Adjust based on requirements
 )
+```
 
-# Example usage
+Checking if it works:
+
+```{python}
 response = llm_azure.invoke("""If you have to create a humanitarian project proposal, 
                                what are the key steps you would start and decision point
                               you need before starting writing the document?""")
@@ -153,9 +157,10 @@ azure_response = azure_llm.call(
 print(f'\nAzure Response:\n\n{azure_response}\n')
 ```
 
-# First Iteration: 2 agents 
-
+# First Iteration
 To start with we define 2 agents that work in a sequential way, one is drafting the report and the second one review it.
+
+## Build the crew
 
 ```{python}
 from crewai import Crew, Agent, Task, Process
@@ -192,23 +197,30 @@ proposal_reviewer = Agent(
 write_proposal = Task(
     description=(
         "Write a detailed project proposal for a humanitarian funding request. "
-        "The project aims to provide develop the usage of AI to improve IOM efficiency when drafting project proposal. "
+        "The project aims to provide develop the usage of AI to improve IOM efficiency when drafting project proposal. The target donor is IOM, budget would be 130k$ and duration one year. The project scope is global"
         "Include: Problem Statement, Objectives, Methodology, Budget, and Expected Impact."
     ),
     expected_output=(
-        "A well-structured 2-page proposal document with clear sections: "
-        "1. Introduction & Problem Statement "
-        "2. Project Objectives "
-        "3. Methodology & Implementation Plan "
-        "4. Budget Breakdown "
-        "5. Expected Outcomes & Sustainability"
+        "A well-structured proposal document formatted as markdown with clear sections: "
+        "1. Project Summary (350 words max)"
+        "2. Rationale (400 words max)"
+        "3. Project Description ( - 600 words max)"
+        "4. Partnerships and Coordination (Stakeholder mapping, cross-cutting themes -350 words max)"
+        "5. Monitoring (350 words max)"
+        "6. Evaluation (350 words max)"
+        "7. Results Matrix (Objective, Outcome, Output, Indicators - formated as a table)"
+        "8. Workplan (formated as a table - with activities, beging and end date, focal point)"
+        "9. Budget (formated as a table)"
+        "10. Risk Assessment and treatment plan (formated as a table: risk, conseuqnece, likelihood, treatment)"
     ),
     agent=proposal_writer,
+    output_file="output/version_1_project_document.md"
 )
 
 review_proposal = Task(
     description=(
         "Critically review the proposal draft and suggest improvements. "
+        "Ensure that the theory of change is well articulated within the project description. "
         "Ensure clarity, alignment with donor expectations, and no errors."
     ),
     expected_output=(
@@ -232,332 +244,293 @@ print("✅ Proposal 1 generated successfully!")
 print(result1)
 ```
 
-# Second Iteration: 3 agents
-
-Now we can add more agents with a manager to coordinate them.
-
-We can also some key elements of the system (projectDescription, fundingOrg, projectDuration, budgetRange, targetRegion) as parameters.
+## Convert the report
+The report has been saved as a markdown file. We can then easily convert it in different format (docx, html..) through the function below:
 
 ```{python}
-from crewai import Agent, Task, Crew, Process
-
-# ================= PROJECT PARAMETERS =================
-projectDescription = "Develop the usage of AI to improve IOM efficiency when drafting project proposals."
-fundingOrg = "International Organization for Migration (IOM)"
-projectDuration = "12 months"
-budgetRange = "$130,000"
-targetRegion = "Headquarter/Global"
-
-# ================= AGENTS =================
-manager_agent = Agent(
-    role="Proposal Manager",
-    goal="Oversee proposal quality and coherence",
-    backstory=(
-        f"You are an expert in humanitarian aid and grant writing. "
-        f"You have 10+ years of experience drafting proposals and "
-        f"know how to structure them for maximum impact. You coordinate the "
-        f"creation of a detailed project proposal for a humanitarian funding request. "
-        f"The project aims to {projectDescription} "
-        f"with funding from {fundingOrg}."
-    ),
-    llm=llm_azure,
-    verbose=True
-)
-
-context_analyst = Agent(
-    role="Context Specialist",
-    goal="Analyze project background and needs",
-    backstory=(
-        f"You are a UN humanitarian needs assessment expert. "
-        f"You specialize in analyzing humanitarian trends and identifying "
-        f"funding opportunities in {targetRegion}."
-    ),
-    llm=llm_azure,
-    verbose=True
-)
-
-design_lead = Agent(
-    role="Program Designer",
-    goal="Develop project framework and logic",
-    backstory=(
-        f"You are an IOM program architect specializing in logical frameworks. "
-        f"You design projects that align with donor priorities and "
-        f"focus on long-term impact within {targetRegion}."
-    ),
-    llm=llm_azure,
-    verbose=True
-)
-
-m_e_specialist = Agent(
-    role="M&E Coordinator",
-    goal="Design monitoring and evaluation systems",
-    backstory=(
-        f"You are a WHO monitoring specialist with results-based management expertise. "
-        f"You ensure that project outcomes align with funding requirements from {fundingOrg} "
-        f"and that KPIs reflect {projectDuration} of project activities."
-    ),
-    llm=llm_azure,
-    verbose=True
-)
-
-# ================= TASKS =================
-summary_task = Task(
-    description=(
-        f"Draft a 350-word project summary following IOM standards. "
-        f"Ensure the summary includes the project context, objectives, "
-        f"theory of change, and expected outcomes for {targetRegion}."
-    ),
-    expected_output="Concise summary with context, objectives, and theory of change.",
-    agent=context_analyst
-)
-
-rationale_task = Task(
-    description=(
-        f"Develop a 400-word problem analysis and justification. "
-        f"Focus on the key humanitarian needs in {targetRegion} and "
-        f"how the project aligns with funding priorities from {fundingOrg}."
-    ),
-    expected_output="Structured rationale with evidence and alignment with funding priorities.",
-    agent=context_analyst
-)
-
-framework_task = Task(
-    description=(
-        f"Create a 600-word project description outlining the theory of change. "
-        f"Describe the project logic, including activities, outputs, outcomes, "
-        f"and expected impact over the {projectDuration} duration."
-    ),
-    expected_output="Detailed framework with activities-outputs-outcomes logic.",
-    agent=design_lead
-)
-
-monitoring_task = Task(
-    description=(
-        f"Design a 350-word monitoring plan with indicators. "
-        f"Ensure the M&E framework includes key performance indicators (KPIs), "
-        f"data collection methods, and a strategy to measure progress within {budgetRange}."
-    ),
-    expected_output="Practical M&E framework with data collection methods and KPIs.",
-    agent=m_e_specialist
-)
-
-# ================= CREW CONFIGURATION =================
-proposal_crew = Crew(
-    agents=[context_analyst, design_lead, m_e_specialist],
-    tasks=[summary_task, rationale_task, framework_task, monitoring_task],    
-    process=Process.hierarchical,  
-    manager_llm=llm_azure,
-    manager_agent=manager_agent,
-    verbose=True
-)
-
-# ================= EXECUTION =================
-result2 = proposal_crew.kickoff()
-print("✅ Proposal 2 generated successfully!")
-print(result2)  
-```
-
-# Third Iteration: Getting the expected format
-
-Now let's ensure we follow the expected document structure by eliciting all the tasks.
-
-```{python}
-import os
+import markdown
 from docx import Document
-from crewai import Agent, Task, Crew, Process
-
-# ================= PROJECT PARAMETERS =================
-projectDescription = "Develop the usage of AI to improve IOM efficiency when drafting project proposals."
-fundingOrg = "International Organization for Migration (IOM)"
-projectDuration = "12 months"
-budgetRange = "$130,000"
-targetRegion = "Headquarter/Global"
-
-# ================= AGENTS =================
-manager_agent = Agent(
-    role="Proposal Manager",
-    goal="Oversee proposal quality and coherence",
-    backstory=(
-        f"You are an expert in humanitarian aid and grant writing. "
-        f"You have 10+ years of experience drafting proposals and "
-        f"know how to structure them for maximum impact. The project aims to {projectDescription} "
-        f"with funding from {fundingOrg}."
-    ),
-    llm=llm_azure,
-    verbose=True
-)
-
-context_analyst = Agent(
-    role="Context Specialist",
-    goal="Analyze project background and needs",
-    backstory=f"Expert in UN humanitarian needs assessments for {targetRegion}.",
-    llm=llm_azure,
-    verbose=True
-)
-
-design_lead = Agent(
-    role="Program Designer",
-    goal="Develop project framework and logic",
-    backstory=f"Program architect specializing in logical frameworks for {targetRegion}.",
-    llm=llm_azure,
-    verbose=True
-)
-
-m_e_specialist = Agent(
-    role="M&E Coordinator",
-    goal="Design monitoring and evaluation systems",
-    backstory=f"Monitoring specialist with expertise in results-based management.",
-    llm=llm_azure,
-    verbose=True
-)
-
-budget_expert = Agent(
-    role="Budget Specialist",
-    goal="Prepare detailed budget for the project",
-    backstory=f"Financial expert with experience in humanitarian project budgeting.",
-    llm=llm_azure,
-    verbose=True
-)
-
-risk_analyst = Agent(
-    role="Risk Analyst",
-    goal="Develop risk assessment plan",
-    backstory=f"Risk management expert specializing in humanitarian projects.",
-    llm=llm_azure,
-    verbose=True
-)
-
-# ================= TASKS =================
-tasks = [
-    Task(
-        description="Draft a 350-word project summary following IOM standards.",
-        expected_output="Concise summary with context, objectives, and theory of change.",
-        agent=context_analyst
-    ),
-    Task(
-        description="Develop a 400-word project rationale with problem analysis and justification.",
-        expected_output="Structured rationale with evidence and alignment with funding priorities.",
-        agent=context_analyst
-    ),
-    Task(
-        description="Write a 600-word project description outlining the theory of change.",
-        expected_output="Detailed framework with activities-outputs-outcomes logic.",
-        agent=design_lead
-    ),
-    Task(
-        description="Define the roles and coordination arrangements for project partners.",
-        expected_output="Clear description of partnership roles and coordination structures.",
-        agent=design_lead
-    ),
-    Task(
-        description="Develop a 350-word monitoring approach.",
-        expected_output="Overview of how project indicators will be monitored.",
-        agent=m_e_specialist
-    ),
-    Task(
-        description="Develop a 350-word evaluation approach.",
-        expected_output="Description of evaluation timing, criteria, and methodology.",
-        agent=m_e_specialist
-    ),
-    Task(
-        description="Create a results matrix including objectives, outcomes, outputs, and indicators.",
-        expected_output="Formatted results table outlining project goals and measurement criteria.",
-        agent=m_e_specialist
-    ),
-    Task(
-        description="Develop a structured workplan with timeline and responsibilities.",
-        expected_output="Formatted workplan table showing key activities and timelines.",
-        agent=design_lead
-    ),
-    Task(
-        description="Prepare a budget using an appropriate humanitarian project template.",
-        expected_output="Detailed budget breakdown with expense categories.",
-        agent=budget_expert
-    ),
-    Task(
-        description="Develop a risk assessment plan outlining key risks and mitigation strategies.",
-        expected_output="Formatted risk assessment table including treatment strategies.",
-        agent=risk_analyst
-    )
-]
-
-# ================= CREW CONFIGURATION =================
-proposal_crew = Crew(
-    agents=[context_analyst, design_lead, m_e_specialist, budget_expert, risk_analyst],
-    tasks=tasks,
-    process=Process.hierarchical,
-    manager_llm=llm_azure,
-    manager_agent=manager_agent,
-    verbose=True
-)
-
-# ================= EXECUTION =================
-result3 = proposal_crew.kickoff()
-
-print("✅ Proposal 3 generated successfully!")
-print(result3) 
-```
-
-Now we can save the results in a word document
-
-```{python}
-#| eval: false
-# ================= SAVE OUTPUT TO WORD DOCUMENT =================
-import json
-
-def save_crew_output(crew_output, base_filename, output_folder):
-    """Saves crew output to both JSON and Word formats."""
-    # 1. Save raw JSON
-    json_filename = os.path.join(output_folder, f"{base_filename}.json")
-    with open(json_filename, 'w') as f:
-        json.dump({
-            "raw_output": crew_output.raw_output,
-            "description": crew_output.description,
-            "metadata": crew_output.metadata
-        }, f, indent=2)
-    
-    # 2. Save to Word
-    word_filename = os.path.join(output_folder, f"{base_filename}.docx")
-    save_to_word(crew_output, word_filename)
-    
-    print(f"✅ Saved outputs to {json_filename} and {word_filename}")
-
-# Usage
-save_crew_output(result, "Final_Proposal")
-
-from docx import Document
+from docx.shared import Pt, RGBColor, Inches
+from docx.enum.table import WD_TABLE_ALIGNMENT, WD_ALIGN_VERTICAL
+from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
+from docx.oxml import parse_xml
+from docx.oxml.ns import nsdecls
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
+from pathlib import Path
 import os
+import re
 
-def save_to_word(results, filename):
-    """Saves the project proposal results to a Word document."""
-    doc = Document()
+def convert_markdown_to_formats(md_file_path, output_dir="output"):
+    """
+    Convert a markdown file to both Word and HTML formats with professional table support.
     
-    for section, content in results.items():
-        doc.add_heading(section, level=1)  # Add section title
+    Args:
+        md_file_path: Path to the input markdown file
+        output_dir: Directory to save output files (default: "output")
+    
+    Returns:
+        Dictionary with paths to generated files {'word': path, 'html': path}
+    """
+    # Create output directory if it doesn't exist
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+    
+    # Get base filename without extension
+    base_name = Path(md_file_path).stem
+    output_paths = {}
+    
+    try:
+        # Read markdown content
+        with open(md_file_path, 'r', encoding='utf-8') as f:
+            md_content = f.read()
         
-        if content is None:  
-            content = ""  # Ensure content is a string
+        # --- Convert to HTML ---
+        html_content = markdown.markdown(md_content, extensions=['tables', 'fenced_code'])
         
-        if isinstance(content, list):  
-            for item in content:
-                if item is None:
-                    item = ""
-                doc.add_paragraph(str(item))  # Ensure every item is a string
+        # Wrap in basic HTML structure
+        full_html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>{base_name}</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 20px; }}
+        h1, h2, h3 {{ color: #0033A0; }}
+        code {{ background: #f8f9fa; padding: 2px 4px; border-radius: 4px; }}
+        pre {{ background: #f8f9fa; padding: 10px; border-radius: 4px; overflow-x: auto; }}
+        table {{ border-collapse: collapse; width: 100%; margin: 20px 0; }}
+        th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
+        th {{ background-color: #f2f2f2; font-weight: bold; }}
+    </style>
+</head>
+<body>
+{html_content}
+</body>
+</html>"""
+        
+        # Save HTML
+        html_path = os.path.join(output_dir, f"{base_name}.html")
+        with open(html_path, 'w', encoding='utf-8') as f:
+            f.write(full_html)
+        output_paths['html'] = html_path
+        
+        # --- Convert to Word with advanced table support ---
+        doc = Document()
+        
+        # Set default document styles
+        style = doc.styles['Normal']
+        font = style.font
+        font.name = 'Calibri'
+        font.size = Pt(11)
+        
+        # Process content line by line, detecting tables reliably
+        lines = md_content.split('\n')
+        current_table = []
+        in_table = False
+        current_paragraph = []
+        
+        for line in lines:
+            # Check if we're starting a table
+            if not in_table and line.strip().startswith('|') and '|' in line[1:]:
+                if current_paragraph:  # Flush any pending paragraph content
+                    doc.add_paragraph('\n'.join(current_paragraph))
+                    current_paragraph = []
+                in_table = True
+                current_table = [line]
+            elif in_table:
+                # Continue collecting table lines until we hit a non-table line
+                if line.strip().startswith('|') or line.strip().startswith('|-') or not line.strip():
+                    current_table.append(line)
+                else:
+                    # Process the accumulated table
+                    if len(current_table) >= 2:  # Need at least header and separator
+                        process_markdown_table(doc, '\n'.join(current_table))
+                    else:
+                        # Not a valid table, add as regular text
+                        doc.add_paragraph('\n'.join(current_table))
+                    in_table = False
+                    current_table = []
+                    # Process the current non-table line
+                    process_markdown_content(doc, line)
+            else:
+                # Regular content
+                process_markdown_content(doc, line, current_paragraph)
+        
+        # Process any remaining content
+        if in_table and len(current_table) >= 2:
+            process_markdown_table(doc, '\n'.join(current_table))
+        elif current_paragraph:
+            doc.add_paragraph('\n'.join(current_paragraph))
+        
+        # Save Word document
+        word_path = os.path.join(output_dir, f"{base_name}.docx")
+        doc.save(word_path)
+        output_paths['word'] = word_path
+        
+        print(f"✅ Converted {md_file_path} to:")
+        print(f"  - Word: {word_path}")
+        print(f"  - HTML: {html_path}")
+        
+        return output_paths
+    
+    except Exception as e:
+        print(f"❌ Error converting {md_file_path}: {str(e)}")
+        return None
+
+def process_markdown_content(doc, content, current_paragraph=None):
+    """Process regular markdown content (non-tables)"""
+    if current_paragraph is None:
+        current_paragraph = []
+    
+    if not content.strip() and not current_paragraph:
+        return
+        
+    # Handle headings
+    if content.startswith('# '):
+        if current_paragraph:
+            doc.add_paragraph('\n'.join(current_paragraph))
+            current_paragraph = []
+        heading = doc.add_heading(content[2:].strip(), level=1)
+        apply_heading_style(heading)
+    elif content.startswith('## '):
+        if current_paragraph:
+            doc.add_paragraph('\n'.join(current_paragraph))
+            current_paragraph = []
+        heading = doc.add_heading(content[3:].strip(), level=2)
+        apply_heading_style(heading)
+    elif content.startswith('### '):
+        if current_paragraph:
+            doc.add_paragraph('\n'.join(current_paragraph))
+            current_paragraph = []
+        heading = doc.add_heading(content[4:].strip(), level=3)
+        apply_heading_style(heading)
+    else:
+        if content.strip() or current_paragraph:
+            current_paragraph.append(content)
+
+def apply_heading_style(heading):
+    """Apply consistent heading styles"""
+    heading.style.font.color.rgb = RGBColor(0x2A, 0x54, 0x8B)   # IOM blue
+    heading.paragraph_format.space_after = Pt(6)
+    heading.paragraph_format.space_before = Pt(12)
+
+def process_markdown_table(doc, table_text):
+    """Convert markdown table to Word table with proper handling of blank lines and formatting"""
+    lines = [line.rstrip() for line in table_text.split('\n') if line.strip() or line == '']
+    
+    # Parse the table structure
+    rows = []
+    current_row = []
+    in_multiline_cell = False
+    
+    for line in lines:
+        if not line.strip():
+            # Blank line - continue current cell if we're in a multiline cell
+            if in_multiline_cell and current_row:
+                current_row[-1] += '\n'
+            continue
+            
+        if line.startswith('|') and line.endswith('|'):
+            # Standard table row
+            cells = [cell.strip() for cell in line[1:-1].split('|')]
+            if not in_multiline_cell:
+                current_row = cells
+                rows.append(current_row)
+            else:
+                # Continuation of multiline cell
+                for i, cell in enumerate(cells):
+                    if i < len(current_row):
+                        current_row[i] += '\n' + cell
+                in_multiline_cell = False
+        elif line.startswith('|---'):
+            # Skip separator lines but mark that we have a header
+            continue
         else:
-            doc.add_paragraph(str(content))  # Convert content to string
+            # Content that belongs to a multiline cell
+            if rows and current_row:
+                for i in range(len(current_row)):
+                    current_row[i] += '\n' + line
+                in_multiline_cell = True
+    
+    # Filter out empty rows and validate
+    rows = [row for row in rows if any(cell.strip() for cell in row)]
+    if not rows or not any(rows):
+        doc.add_paragraph(table_text)
+        return
+    
+    # Create Word table
+    num_cols = max(len(row) for row in rows)
+    table = doc.add_table(rows=len(rows), cols=num_cols)
+    
+    # Apply table styling
+    tbl = table._tbl
+    tblPr = tbl.tblPr
+    tblBorders = OxmlElement('w:tblBorders')
+    for border_name in ['top', 'left', 'bottom', 'right', 'insideH', 'insideV']:
+        border = OxmlElement(f'w:{border_name}')
+        border.set(qn('w:val'), 'single')
+        border.set(qn('w:sz'), '4')
+        border.set(qn('w:space'), '0')
+        border.set(qn('w:color'), '000000')
+        tblBorders.append(border)
+    tblPr.append(tblBorders)
+    
+    # Populate table cells
+    for i, row in enumerate(rows):
+        for j in range(num_cols):
+            cell_content = row[j] if j < len(row) else ""
+            cell_content = clean_cell_content(cell_content)
+            
+            table.cell(i, j).text = cell_content
+            table.cell(i, j).vertical_alignment = WD_ALIGN_VERTICAL.TOP
+            
+            # Header row formatting (if we had a separator line)
+            if i == 0 and any('|---' in line for line in lines):
+                table.cell(i, j).paragraphs[0].runs[0].bold = True
+                shading_elm = table.cell(i, j)._tc.get_or_add_tcPr()
+                shading_elm.append(parse_xml(
+                    r'<w:shd {} w:fill="D3D3D3"/>'.format(nsdecls('w'))
+                ))
+            
+            # Adjust column width based on content
+            max_line_len = max(len(line) for line in cell_content.split('\n')) if cell_content else 0
+            if max_line_len > 30:
+                table.columns[j].width = Inches(2.5)
+            elif max_line_len > 15:
+                table.columns[j].width = Inches(1.75)
+            else:
+                table.columns[j].width = Inches(1.0)
+    
+    # Add spacing after table
+    doc.add_paragraph()
 
-    doc.save(filename)
-    print(f"✅ Project Proposal saved to {filename}")
-
-# Ensure the output folder exists
-output_folder = "output"
-os.makedirs(output_folder, exist_ok=True)
-
-# Example: Save results to Word document
-output_filename = os.path.join(output_folder, "Project_Proposal.docx")
-save_to_word(results, output_filename)
- 
+def clean_cell_content(content):
+    """Clean up markdown formatting in table cells"""
+    # Remove any remaining markdown formatting
+    content = re.sub(r'\[(.*?)\]\(.*?\)', r'\1', content)  # Remove links
+    content = re.sub(r'\*\*(.*?)\*\*', r'\1', content)     # Remove bold
+    content = re.sub(r'\*(.*?)\*', r'\1', content)         # Remove italic
+    content = re.sub(r'`(.*?)`', r'\1', content)           # Remove code
+    content = re.sub(r'<br\s*/?>', '\n', content)          # Convert <br> to newline
+    
+    # Clean up newlines
+    lines = [line.strip() for line in content.split('\n')]
+    return '\n'.join(filter(None, lines))
 ```
+
+
+```{python}
+convert_markdown_to_formats(md_file_path="output/version_1_project_document.md", output_dir="output")
+```
+
+## Review the report
+
+```{=html}
+<div class="embedded-content">
+<iframe src="output/version_1_project_document.html" style="width: 100%; height: 500px; border: none;"></iframe>
+</div>
+```
+
 
 
 # Conclusion
@@ -568,7 +541,7 @@ This requires a lot of experimentation in the definition of the different agents
 
 - The knowledge from [IOM Project Handbook](https://publications.iom.int/system/files/pdf/iom_project_handbook_6feb2012.pdf) needs also to be more systematically extracted with [LlamaIndex Tool](https://docs.crewai.com/tools/llamaindextool), ideally through a Questions & Answers format to more strictly inform the specific task from each agents.
 
-- In addition, the system can benefit from the integration of tools like [Google Serper Search](https://docs.crewai.com/tools/serperdevtool) or custom Machine Learning APIs (for instance to predict donors funding appetite based on existing data).
+- In addition, the system can benefit from the integration of tools like [Google Serper Search](https://docs.crewai.com/tools/serperdevtool), and RAG tools to extract the standard indicators to use from IOM standard logframe, or to leverage learnings from [Evaluation Reports](https://edouard-legoupil.github.io/rag_extraction/) as well as custom Machine Learning APIs (for instance to [predict donors funding appetite](https://iom-dia-na.netlify.app/iom_dim) based on existing data).
 
 ```{python}
 #| eval: false
@@ -582,3 +555,6 @@ researcher = Agent(
     # ... (rest of the agent definition)
 )
 ```
+
+Once we have reached acceptable results, we can just combine all of this into a python function and build an html/js interface to collect the parmeters from the users and output the results.
+

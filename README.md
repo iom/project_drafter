@@ -1,21 +1,28 @@
 # project_drafter
 
-This repo is an intial exploration of the usage of a Multi-agent system to design project proposal, based on recommendations from the IOM (International Organization for Migration) project proposal template and [IOM project handbook](https://publications.iom.int/system/files/pdf/iom_project_handbook_6feb2012.pdf).
+This repo present and share an initial exploration of the usage of an AI [Multi-Agent System](https://en.wikipedia.org/wiki/Multi-agent_system) to design project proposal, based on recommendations from the IOM (International Organization for Migration) project proposal template and [IOM project handbook](https://publications.iom.int/system/files/pdf/iom_project_handbook_6feb2012.pdf).
 
-The [notebook](http://iom.github.io/project_drafter) will help you understand the basics of [CrewAI](https://www.crewai.com/), a framework for building autonomous AI agents that work together to accomplish such complex tasks. The system will consist of multiple agents, each with specific roles and responsibilities, to collaboratively create a __comprehensive project proposal__. 
+The [notebook](http://iom.github.io/project_drafter) will help you understand the basics of [CrewAI](https://www.crewai.com/), an open source framework for building autonomous AI agents that work together to accomplish such complex tasks. The system will consist of multiple agents, each with specific roles and responsibilities, to collaboratively create a __comprehensive project proposal__. 
 
-The system include a "manager agent" that oversees the collaboration and ensures that the final output is coherent and meets the requirements of the project proposal template. The manager agent will coordinate the efforts of the other agents, ensuring that they work together effectively and that the final output is a well-structured and comprehensive project proposal.
+In the first iteration, the system has one agent writing the report and a second one doing the review. In the second, iteration, the system include a "manager agent" that oversees the collaboration and ensures that the final output is coherent and meets the requirements of the project proposal template. The manager agent will coordinate the efforts of the other agents, ensuring that they work together effectively and that the final output is a well-structured and comprehensive project proposal.
 
 The system shall take an input prompt that outlines the project idea, its location, the targeted donor, an an estimation of budget and duration. The agents will be designed to handle different sections of the proposal, ensuring that all necessary components are covered.
+
+## A first example
+
+For this example, we requested the system to create a project proposal for a fictitious global project "Develop the usage of AI to improve IOM efficiency when drafting project proposals". The project is expected to last 12 months and has an estimated budget of $130,000. The targeted donor is IOM. 
+
+You can review the output in the [output folder of this repository](https://github.com/iom/project_drafter/tree/main/output) as well as the instructions for the agents and tasks within the notebook itself. Do not hesitate to [provide feedback](https://github.com/iom/project_drafter/issues/newhttps://github.com/iom/project_drafter/issues/new).
 
 ## Proposal Template Description  
 
 The IOM project proposal template is a comprehensive document that outlines the key components of a project proposal. It includes the following sections:
 
+
 ### 1. Project Summary (350 words max)
 
-Provide a brief overview of the proposed project, including the context and the need, and the objective of the project. 
-Also, describe how the project’s activities will achieve the key outputs, and how outputs are likely to influence the achievement of the project’s outcomes.
+Provide a brief overview of the proposed project, including the context and the need, and the objective of the project.
+Also, describe how the project's activities will achieve the key outputs, and how outputs are likely to influence the achievement of the project's outcomes.
 
 ### 2. Project Rationale (400 words max)
 
@@ -44,9 +51,11 @@ Articulate and outline how and why a set of intended results and activities will
  - What are the hypotheses explaining why it is thought that the implementation of activities will lead to the achievement of outputs, why the achievement of outputs will influence the achievement of outcomes, and why the achievement of outcomes will contribute to the project objective?
 
 2. Who are the stakeholders?
- - Why is IOM best placed to address the problem? What is IOM’s added value/comparative advantage in implementing the project? What special skills, knowledge and/or capacities does IOM have to justify its involvement?
- - Which other stakeholders would be involved in the project, and why are they required for the project to succeed?
- - Consider gender and age when identifying stakeholders and strive for stakeholders who are representative of the target population.
+- Why is IOM best placed to address the problem?
+- What is IOM's added value/comparative advantage in implementing the project? 
+- What special skills, knowledge and/or capacities does IOM have to justify its involvement?
+- Which other stakeholders would be involved in the project, and why are they required for the project to succeed?
+- Consider gender and age when identifying stakeholders and strive for stakeholders who are representative of the target population.
 
 3. How will the project address the following cross-cutting themes of rights-based approach to programming, gender mainstreaming, environmental sensitivity and sustainability, sustainability of project results, principled humanitarian action and mainstreaming protection in crisis response? 
 
@@ -141,7 +150,7 @@ The ouput shall be formatted as a table with the following columns:
 
 
 
-### Using Ollama with a local small 7B model
+### Working offline - Using Ollama with a local small 7B model
 
 If you can not access any LLM  API, you can install one offline running locally on your computer.
 
